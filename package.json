@@ -1,6 +1,6 @@
 {
   "name": "config-mask",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "配置文件脱敏 / 还原工具。纯前端单文件，双击 [`index.html`](index.html) 即用，数据不出本机。",
   "main": "index.js",
   "directories": {
@@ -8,11 +8,20 @@
     "example": "examples"
   },
   "scripts": {
-    "screenshots": "node scripts/capture-screenshots.mjs"
+    "screenshots": "node scripts/capture-screenshots.mjs",
+    "test": "node scripts/smoke-test.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "nginx",
+    "desensitize",
+    "security",
+    "offline",
+    "privacy",
+    "config",
+    "redact"
+  ],
+  "author": "haoyupan2003",
+  "license": "Apache-2.0",
   "devDependencies": {
     "playwright": "^1.61.1"
   }

@@ -20,6 +20,8 @@
 
 截图：[`docs/screenshots/zh/`](docs/screenshots/zh/) · [`docs/screenshots/en/`](docs/screenshots/en/)
 
+详见 [CHANGELOG](CHANGELOG.md) 与 [发布清单](RELEASE-CHECKLIST.zh-CN.md)。
+
 [English README](README.md)
 
 ## 部署

@@ -20,6 +20,8 @@ UI: English / 中文 (top bar language switch).
 
 Screenshots: [`docs/screenshots/en/`](docs/screenshots/en/) · [`docs/screenshots/zh/`](docs/screenshots/zh/)
 
+See [CHANGELOG](CHANGELOG.md) and [release checklist](RELEASE-CHECKLIST.md).
+
 [中文说明](README.zh-CN.md)
 
 ## Deploy
