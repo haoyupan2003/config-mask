@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  app:
+    image: registry.cn-hangzhou.aliyuncs.com/trading/app:latest
+    container_name: trading-app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=10.0.0.5
+      - DB_PORT=3306
+      - DB_PASSWORD=MyS3cret#Pass_2026
+      - REDIS_HOST=redis.internal
+      - JWT_SECRET=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature
+    volumes:
+      - /var/log/trading:/var/log/app
+      - /data/uploads:/app/uploads
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - trading-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: trading-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=R00t_P@ss_word!
+      - MYSQL_DATABASE=trading_db
+      - MYSQL_USER=trading_user
+      - MYSQL_PASSWORD=Trad1ng_P@ss
+    volumes:
+      - /data/mysql:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - trading-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: trading-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass r3d1s_s3cr3t
+    volumes:
+      - /data/redis:/data
+    networks:
+      - trading-net
+
+  nginx:
+    image: nginx:1.25
+    container_name: trading-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/nginx/conf.d:/etc/nginx/conf.d
+      - /www/wwwroot:/usr/share/nginx/html
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/log/nginx:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - trading-net
+
+networks:
+  trading-net:
+    driver: bridge

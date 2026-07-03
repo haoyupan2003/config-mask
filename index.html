@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" id="meta-desc" content="Offline config masking and restore tool for Nginx, env, YAML, and keys.">
+<meta name="keywords" content="config mask,nginx mask,env mask,private key,AK SK,offline redaction">
+<title>config-mask</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    overflow: hidden;
+  }
+
+  /* ===== 顶部栏 ===== */
+  .topbar {
+    height: 56px;
+    background: #252526;
+    border-bottom: 1px solid #3c3c3c;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+  }
+  .topbar .logo {
+    font-size: 15px;
+    font-weight: 600;
+    color: #4ec9b0;
+    margin-right: 24px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .topbar .logo .sub {
+    font-size: 11px;
+    color: #888;
+    font-weight: 400;
+    margin-left: 6px;
+  }
+
+  /* 分隔线 */
+  .divider {
+    width: 1px;
+    height: 22px;
+    background: #3c3c3c;
+    margin: 0 4px;
+  }
+
+  /* 开关按钮 */
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #9a9a9a;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid #3c3c3c;
+    background: #2d2d30;
+    transition: all 0.15s;
+  }
+  .toggle:hover { border-color: #555; color: #d4d4d4; }
+  .toggle .switch {
+    width: 28px;
+    height: 14px;
+    background: #555;
+    border-radius: 7px;
+    position: relative;
+    transition: all 0.2s;
+  }
+  .toggle .switch::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: all 0.2s;
+  }
+  .toggle.active { color: #4ec9b0; border-color: #2e5a33; background: #1e3a23; }
+  .toggle.active .switch { background: #4caf50; }
+  .toggle.active .switch::after { left: 16px; }
+
+  .btn {
+    background: #0a6dcf;
+    color: #fff;
+    border: 1px solid #0a6dcf;
+    padding: 7px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #0a84ff; border-color: #0a84ff; }
+  .btn:active { transform: translateY(1px); }
+  .btn.btn-secondary {
+    background: #3a3d41;
+    border-color: #555;
+    color: #d4d4d4;
+  }
+  .btn.btn-secondary:hover { background: #4a4d51; border-color: #666; }
+  .btn.btn-danger {
+    background: #5a1d1d;
+    border-color: #7a2d2d;
+    color: #ffb3b3;
+  }
+  .btn.btn-danger:hover { background: #7a2d2d; border-color: #9a3d3d; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status {
+    margin-left: auto;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    background: #2d2d30;
+    border: 1px solid #3c3c3c;
+    color: #888;
+    min-width: 240px;
+    text-align: center;
+    transition: all 0.2s;
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  }
+  .status.success { background: #1e3a23; border-color: #2e5a33; color: #4caf50; }
+  .status.error { background: #3a1d1d; border-color: #5a2d2d; color: #f44336; }
+  .status.info { background: #1e2d3a; border-color: #2e4d5a; color: #4fc3f7; }
+
+  /* ===== 主体双栏 ===== */
+  .main {
+    display: flex;
+    height: calc(100vh - 56px - 28px);
+  }
+  .pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #3c3c3c;
+    min-width: 0;
+  }
+  .pane:last-child { border-right: none; }
+  .pane-header {
+    height: 34px;
+    background: #2d2d30;
+    border-bottom: 1px solid #3c3c3c;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #9a9a9a;
+  }
+  .pane-header .tag {
+    background: #3c3c3c;
+    color: #d4d4d4;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  }
+  .pane-header .mapping-info {
+    margin-left: auto;
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    font-size: 11px;
+    color: #569cd6;
+  }
+  .pane-body {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  textarea, textarea.output {
+    width: 100%;
+    height: 100%;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    outline: none;
+    padding: 14px 16px;
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Monaco, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+  textarea::placeholder { color: #5a5a5a; white-space: pre-wrap; }
+  textarea:focus { background: #1a1a1a; }
+
+  /* 输出框：textarea + backdrop 高亮层 */
+  .output-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #181818;
+  }
+  .output-backdrop, textarea.output {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 14px 16px;
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Monaco, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre;
+    tab-size: 2;
+    border: none;
+    overflow: auto;
+    box-sizing: border-box;
+  }
+  .output-backdrop {
+    pointer-events: none;
+    color: #d4d4d4;
+    background: transparent;
+    z-index: 1;
+    overflow: hidden;  /* backdrop 不显示滚动条，由 textarea 控制滚动 */
+  }
+  textarea.output {
+    background: transparent;
+    color: transparent;
+    caret-color: #d4d4d4;
+    -webkit-text-fill-color: transparent;
+    z-index: 2;
+  }
+  textarea.output::placeholder {
+    color: #5a5a5a;
+    -webkit-text-fill-color: #5a5a5a;
+  }
+  textarea.output:focus { background: transparent; }
+
+  /* 占位符高亮样式 */
+  .output-backdrop .perm {
+    color: #f44336;
+    background: rgba(244,67,54,0.12);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 600;
+  }
+  .output-backdrop .reversible {
+    color: #4ec9b0;
+    background: rgba(78,201,176,0.10);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 600;
+  }
+
+  /* ===== 底部状态栏 ===== */
+  .footer {
+    height: 28px;
+    background: #007acc;
+    color: #fff;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 20px;
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  }
+  .footer .item { display: flex; align-items: center; gap: 6px; }
+  .footer .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4caf50;
+    box-shadow: 0 0 6px #4caf50;
+  }
+  .footer .spacer { margin-left: auto; }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #1e1e1e; }
+  ::-webkit-scrollbar-thumb { background: #424242; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+  /* ===== 映射管理浮层 ===== */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #252526;
+    border: 1px solid #3c3c3c;
+    border-radius: 6px;
+    width: 720px;
+    max-width: 92vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid #3c3c3c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-header h3 {
+    font-size: 14px;
+    color: #4ec9b0;
+    font-weight: 600;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+  }
+  .modal-close:hover { color: #fff; }
+  .modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 12px 20px;
+  }
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #3c3c3c;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    color: #888;
+  }
+  .modal-warn { width: 520px; }
+  .warn-body p { margin-bottom: 10px; line-height: 1.55; font-size: 13px; color: #c5c5c5; }
+  .warn-body p:last-child { margin-bottom: 0; color: #e8a87c; }
+  .session-card {
+    background: #1e1e1e;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .session-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .session-card-head .sid {
+    font-family: "JetBrains Mono", Consolas, monospace;
+    color: #569cd6;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .session-card-head .meta {
+    font-size: 11px;
+    color: #888;
+  }
+  .session-card-head .del-btn {
+    margin-left: 8px;
+    background: #3a1d1d;
+    border: 1px solid #5a2d2d;
+    color: #ffb3b3;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .session-card-head .del-btn:hover { background: #5a2d2d; }
+  .session-card-head .activate-btn {
+    margin-left: auto;
+    background: #1e3a23;
+    border: 1px solid #2e5a33;
+    color: #4caf50;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .session-card-head .activate-btn:hover { background: #2e5a33; }
+  .session-card-head .activate-btn-spacer { display: none; }
+  .session-card-body {
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 11px;
+    color: #d4d4d4;
+    max-height: 100px;
+    overflow: auto;
+    background: #181818;
+    padding: 6px 8px;
+    border-radius: 3px;
+  }
+  .session-card-body .ph { color: #4ec9b0; }
+  .session-card-body .arrow { color: #888; margin: 0 6px; }
+  .empty-tip {
+    text-align: center;
+    color: #666;
+    padding: 40px 0;
+    font-size: 13px;
+  }
+
+  /* 响应式 */
+  @media (max-width: 900px) {
+    .main { flex-direction: column; height: calc(100vh - 56px - 28px); }
+    .pane { border-right: none; border-bottom: 1px solid #3c3c3c; }
+    .topbar { flex-wrap: wrap; height: auto; padding: 10px; }
+    .topbar .status { margin-left: 0; min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="logo">config-mask<span class="sub" data-i18n="logoSub">v1.2 · Offline</span></div>
+  <button class="btn" id="btn-desensitize" data-i18n-title="btnMaskTitle" title="Mask left pane (Ctrl+Enter)"><span data-i18n="btnMask">Mask →</span></button>
+  <button class="btn btn-secondary" id="btn-restore" data-i18n-title="btnRestoreTitle" title="Restore from right pane (Ctrl+R)"><span data-i18n="btnRestore">← Restore</span></button>
+  <button class="btn btn-secondary" id="btn-copy" data-i18n-title="btnCopyTitle" title="Copy right pane (Ctrl+Shift+C)"><span data-i18n="btnCopy">Copy</span></button>
+  <button class="btn btn-danger" id="btn-clear" data-i18n-title="btnClearTitle" title="Clear all (Ctrl+L)"><span data-i18n="btnClear">Clear all</span></button>
+  <div class="divider"></div>
+  <div class="toggle" id="toggle-persist" data-i18n-title="togglePersistTitle" title="Save mappings to localStorage across reloads">
+    <div class="switch"></div>
+    <span data-i18n="togglePersist">Persist mappings</span>
+  </div>
+  <div class="toggle" id="toggle-restore-secrets" data-i18n-title="toggleRestoreSecretsTitle" title="Store secrets so [KEY_PERM] can be restored">
+    <div class="switch"></div>
+    <span data-i18n="toggleRestoreSecrets">Restore secrets</span>
+  </div>
+  <button class="btn btn-secondary" id="btn-manage" data-i18n-title="btnManageTitle" title="Manage mapping sessions"><span data-i18n="btnManage">Sessions</span></button>
+  <button class="btn btn-secondary" id="btn-lang" title="Switch language">中</button>
+  <div class="status" id="status" data-i18n="statusReadyOffline">Ready · offline, local only</div>
+</div>
+
+<!-- 主体双栏 -->
+<div class="main">
+  <!-- 左栏：原始输入 -->
+  <div class="pane">
+    <div class="pane-header">
+      <span data-i18n="paneInput">Original config</span>
+      <span class="tag" id="input-meta">0 lines · 0 chars</span>
+    </div>
+    <div class="pane-body">
+      <textarea id="input" data-i18n-ph="inputPlaceholder"
+        spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+    </div>
+  </div>
+
+  <div class="pane">
+    <div class="pane-header">
+      <span data-i18n="paneOutput">Masked / restored output (editable)</span>
+      <span class="tag" id="output-meta">0 lines · 0 chars</span>
+      <span class="mapping-info" id="mapping-info"></span>
+    </div>
+    <div class="pane-body">
+      <div class="output-wrap">
+        <pre class="output-backdrop" id="output-backdrop" aria-hidden="true"></pre>
+        <textarea class="output" id="output" data-i18n-ph="outputPlaceholder" data-i18n-title="outputTitle"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="item"><span class="dot"></span><span data-i18n="footerLocal">Local only · no upload</span></div>
+  <div class="item"><span data-i18n="footerMapCache">Mappings:</span> <span id="map-count">0</span></div>
+  <div class="item"><span data-i18n="footerLastSession">Last session:</span> <span id="last-mapping-id">—</span></div>
+  <div class="item"><span data-i18n="footerPersist">Persistence:</span> <span id="persist-status" data-i18n="persistOff">Off</span></div>
+  <div class="spacer"></div>
+  <div class="item" data-i18n="footerShortcuts">Shortcuts: Ctrl+Enter mask · Ctrl+R restore · Ctrl+Shift+C copy · Ctrl+L clear</div>
+</div>
+
+<div class="modal-overlay" id="modal-manage">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 data-i18n="modalTitle">Mapping sessions</h3>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <span id="modal-hint" data-i18n="modalHintOff">[KEY_PERM] items are not stored and cannot be restored</span>
+      <div class="spacer" style="margin-left:auto"></div>
+      <button class="btn btn-danger" id="btn-clear-persist" data-i18n="btnClearPersist">Clear localStorage mappings</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-secrets-warn">
+  <div class="modal modal-warn">
+    <div class="modal-header">
+      <h3 data-i18n="warnSecretsTitle">Enable secret restore?</h3>
+      <button class="modal-close" id="modal-secrets-close">&times;</button>
+    </div>
+    <div class="modal-body warn-body">
+      <p data-i18n="warnSecretsP1">Passwords, private keys, and tokens will be stored in the mapping table so [KEY_PERM] can be restored.</p>
+      <p data-i18n="warnSecretsP2">If persistence is on, this data is written to localStorage. Clear mappings when you are done — use "Clear all" or "Clear localStorage mappings" in Sessions.</p>
+      <p data-i18n="warnSecretsP3">Only enable this on a trusted device.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="btn-secrets-cancel" data-i18n="warnSecretsCancel">Cancel</button>
+      <button class="btn btn-danger" id="btn-secrets-confirm" data-i18n="warnSecretsConfirm">I understand, enable</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =================================================================
+ * i18n
+ * ================================================================= */
+const I18N = {
+  en: {
+    docTitle: 'config-mask · Config mask / restore',
+    metaDescription: 'Offline config masking and restore for Nginx, env, YAML, and keys. Reversible and irreversible layers; data stays local.',
+    logoSub: 'v1.2 · Offline',
+    btnMask: 'Mask →', btnMaskTitle: 'Mask left pane (Ctrl+Enter)',
+    btnRestore: '← Restore', btnRestoreTitle: 'Restore from right pane (Ctrl+R)',
+    btnCopy: 'Copy', btnCopyTitle: 'Copy right pane (Ctrl+Shift+C)',
+    btnClear: 'Clear all', btnClearTitle: 'Clear all input, output, and mappings (Ctrl+L)',
+    togglePersist: 'Persist mappings', togglePersistTitle: 'Save mappings to localStorage across reloads',
+    toggleRestoreSecrets: 'Restore secrets', toggleRestoreSecretsTitle: 'Store secrets so [KEY_PERM] can be restored',
+    warnSecretsTitle: 'Enable secret restore?',
+    warnSecretsP1: 'Passwords, private keys, and tokens will be stored in the mapping table so [KEY_PERM] can be restored.',
+    warnSecretsP2: 'If persistence is on, this data is written to localStorage. Clear mappings when done — use "Clear all" or "Clear localStorage mappings" in Sessions.',
+    warnSecretsP3: 'Only enable this on a trusted device.',
+    warnSecretsCancel: 'Cancel', warnSecretsConfirm: 'I understand, enable',
+    restoreSecretsOnMsg: 'Secret restore enabled · [KEY_PERM] will be stored in mappings',
+    restoreSecretsOffMsg: 'Secret restore disabled · [KEY_PERM] will not be stored',
+    modalHintOff: '[KEY_PERM] items are not stored and cannot be restored',
+    modalHintOn: '[KEY_PERM] items are stored when secret restore is on — clear localStorage when done',
+    statusReadyOffline: 'Ready · offline, local only',
+    paneInput: 'Original config', paneOutput: 'Masked / restored output (editable)',
+    footerLocal: 'Local only · no upload',
+    footerMapCache: 'Mappings:', footerLastSession: 'Last session:', footerPersist: 'Persistence:',
+    persistOff: 'Off', persistOn: 'On',
+    footerShortcuts: 'Shortcuts: Ctrl+Enter mask · Ctrl+R restore · Ctrl+Shift+C copy · Ctrl+L clear',
+    modalTitle: 'Mapping sessions',
+    btnManage: 'Sessions', btnManageTitle: 'Manage mapping sessions',
+    btnClearPersist: 'Clear localStorage mappings',
+    inputPlaceholder: 'Paste Nginx / Baota / YAML / env / key material here...\n\nExample:\n  server {\n    listen 443 ssl;\n    server_name api.example.com;\n    proxy_pass http://10.0.0.5:8080;\n  }\n  DB_PASSWORD=secret\n  -----BEGIN RSA PRIVATE KEY-----\n  ...',
+    outputPlaceholder: 'Masked output appears here.\n\nTo restore:\n1. Paste masked text here\n2. Click "← Restore"\n3. Original config returns ([KEY_PERM] stays masked)\n\nPlaceholders: [TYPE_NN.SID] e.g. [DOMAIN_01.NSAP]',
+    outputTitle: 'Paste masked text here, then click Restore',
+    metaLinesChars: '{lines} lines · {chars} chars',
+    modalEmpty: 'No mapping sessions yet',
+    modalEmptySub: 'Sessions appear here after masking',
+    sessionActive: 'Active', sessionCurrent: 'Current',
+    sessionActivate: 'Set active', sessionAlready: 'Already active',
+    sessionDelete: 'Delete', sessionMore: '...{n} more',
+    sessionMeta: '{time} · {n} items · {secrets} secrets',
+    sessionMetaNoSecrets: '{time} · {n} items',
+    confirmDeleteSession: 'Delete session {sid}? Its mappings cannot be used for restore.',
+    confirmClearPersist: 'Clear all mappings in localStorage? This cannot be undone.',
+    statusDeletedSession: 'Deleted session {sid}',
+    statusActivatedSession: 'Activated session {sid} · restore will prefer this session',
+    restoreNoPlaceholders: 'No mask placeholders found in the right pane',
+    errNoInput: 'Nothing to mask — paste config on the left',
+    errNoSensitive: 'No sensitive content detected (IP/domain/password/key, etc.)',
+    errMaskFailed: 'Mask failed: {msg}',
+    errNoRestoreContent: 'Nothing to restore on the right',
+    errNoMappings: 'No mappings available — mask first or mappings were cleared',
+    errRestoreFailed: 'Restore failed: {msg}',
+    restorePartial: 'Restored · {n} placeholder(s) had no mapping (mappings may be cleared)',
+    restoreDone: 'Restored · {total} placeholder(s) · {perm} [KEY_PERM] kept',
+    restoreDoneWithSecrets: 'Restored · {total} placeholder(s) · {permRestored} secret(s) restored',
+    maskDone: 'Masked · {rev} reversible · {perm} irreversible · session {sid}',
+    mappingInfo: 'Mapping {sid} · {n} reversible',
+    errNoCopy: 'Nothing to copy on the right',
+    copied: 'Copied {n} chars to clipboard',
+    copiedFallback: 'Copied {n} chars (fallback)',
+    errCopyManual: 'Copy failed — select text manually',
+    errCopyFailed: 'Copy failed: {msg}',
+    clearedAll: 'Cleared all input, output, and mappings (including localStorage)',
+    persistOnMsg: 'Persistence on · mappings saved to localStorage',
+    persistOffMsg: 'Persistence off · localStorage mappings cleared',
+    persistFailed: 'Persist failed: {msg} (localStorage may be full)',
+    clearedPersist: 'Cleared all localStorage mappings',
+    readyPersistRestored: 'Ready · persistence on · restored {n} session(s)',
+    readyPersistEmpty: 'Ready · persistence on · no saved sessions',
+    readyOffline: 'Ready · offline, local only (persistence off)'
+  },
+  zh: {
+    docTitle: 'config-mask · 配置脱敏 / 还原工具',
+    metaDescription: '纯前端离线的配置文件脱敏 / 还原工具。支持 Nginx / 宝塔 / YAML / env / 私钥，可逆与不可逆分层，数据仅本地处理。',
+    logoSub: 'v1.2 · 离线本地',
+    btnMask: '脱敏 →', btnMaskTitle: '对左侧文本执行脱敏 (Ctrl+Enter)',
+    btnRestore: '← 还原', btnRestoreTitle: '将右侧脱敏文本还原 (Ctrl+R)',
+    btnCopy: '复制结果', btnCopyTitle: '复制右侧结果 (Ctrl+Shift+C)',
+    btnClear: '全部清空', btnClearTitle: '清空所有输入输出和映射 (Ctrl+L)',
+    togglePersist: '持久化映射', togglePersistTitle: '映射保存到 localStorage，刷新仍可还原',
+    toggleRestoreSecrets: '还原密钥', toggleRestoreSecretsTitle: '存储密钥，使 [KEY_PERM] 可还原',
+    warnSecretsTitle: '开启密钥还原？',
+    warnSecretsP1: '密码、私钥、Token 将存入映射表，以便还原 [KEY_PERM]。',
+    warnSecretsP2: '若同时开启持久化，数据会写入 localStorage。用完后请清理 —— 点「全部清空」或会话面板里的「清空 localStorage 持久化数据」。',
+    warnSecretsP3: '仅在可信设备上开启。',
+    warnSecretsCancel: '取消', warnSecretsConfirm: '我已了解，开启',
+    restoreSecretsOnMsg: '已开启密钥还原 · [KEY_PERM] 将存入映射',
+    restoreSecretsOffMsg: '已关闭密钥还原 · [KEY_PERM] 不再存储',
+    modalHintOff: '提示：[KEY_PERM] 项不存映射，不可逆',
+    modalHintOn: '密钥还原已开启 · [KEY_PERM] 会存入映射，用完后请清理 localStorage',
+    statusReadyOffline: '就绪 · 纯本地离线运行',
+    paneInput: '原始配置输入', paneOutput: '脱敏结果 / 还原输出（可编辑）',
+    footerLocal: '本地运行 · 零上传',
+    footerMapCache: '映射缓存：', footerLastSession: '最近会话：', footerPersist: '持久化：',
+    persistOff: '关闭', persistOn: '开启',
+    footerShortcuts: '快捷键：Ctrl+Enter 脱敏 · Ctrl+R 还原 · Ctrl+Shift+C 复制 · Ctrl+L 清空',
+    modalTitle: '映射会话管理',
+    btnManage: '映射管理', btnManageTitle: '查看和管理历史映射会话',
+    btnClearPersist: '清空 localStorage 持久化数据',
+    inputPlaceholder: '在此粘贴 Nginx / 宝塔 / YAML / env / 密钥类配置...\n\n示例：\n  server {\n    listen 443 ssl;\n    server_name api.example.com;\n    proxy_pass http://10.0.0.5:8080;\n  }\n  DB_PASSWORD=secret\n  -----BEGIN RSA PRIVATE KEY-----\n  ...',
+    outputPlaceholder: '脱敏结果显示在这里。\n\n还原：\n1. 粘贴脱敏文本到此框\n2. 点击「← 还原」\n3. 恢复原始配置（[KEY_PERM] 除外）\n\n占位符：[TYPE_NN.SID] 如 [DOMAIN_01.NSAP]',
+    outputTitle: '还原时把脱敏文本粘贴到此，再点顶部「← 还原」',
+    metaLinesChars: '{lines} 行 · {chars} 字符',
+    modalEmpty: '暂无映射会话',
+    modalEmptySub: '脱敏后会话将显示在这里',
+    sessionActive: '当前活跃', sessionCurrent: '已是当前',
+    sessionActivate: '设为当前', sessionAlready: '已是当前',
+    sessionDelete: '删除', sessionMore: '...还有 {n} 项',
+    sessionMeta: '{time} · {n} 项 · {secrets} 个密钥',
+    sessionMetaNoSecrets: '{time} · {n} 项',
+    confirmDeleteSession: '确认删除会话 {sid}？此会话的映射将无法用于还原。',
+    confirmClearPersist: '确认清空 localStorage 中的全部映射数据？此操作不可恢复。',
+    statusDeletedSession: '已删除会话 {sid}',
+    statusActivatedSession: '已激活会话 {sid} · 后续还原将优先匹配该会话',
+    restoreNoPlaceholders: '右侧文本中未找到任何脱敏占位符，无需还原',
+    errNoInput: '未粘贴任何内容，无法脱敏',
+    errNoSensitive: '未识别到任何敏感内容（IP/域名/密码/密钥等）',
+    errMaskFailed: '脱敏失败：{msg}',
+    errNoRestoreContent: '右侧无可还原内容',
+    errNoMappings: '无可用映射缓存，无法还原（请先脱敏或检查是否已清空）',
+    errRestoreFailed: '还原失败：{msg}',
+    restorePartial: '还原完成 · 但有 {n} 个占位符未找到映射（可能映射已清空）',
+    restoreDone: '还原完成 · {total} 个占位符已还原 · {perm} 个 [KEY_PERM] 保留',
+    restoreDoneWithSecrets: '还原完成 · {total} 个占位符已还原 · {permRestored} 个密钥已还原',
+    maskDone: '脱敏完成 · 可逆 {rev} 项 · 不可逆 {perm} 项 · 映射 {sid}',
+    mappingInfo: 'Mapping {sid} · {n} 项可逆',
+    errNoCopy: '右侧无内容可复制',
+    copied: '已复制 {n} 字符到剪贴板',
+    copiedFallback: '已复制 {n} 字符（降级方案）',
+    errCopyManual: '复制失败，请手动选择文本复制',
+    errCopyFailed: '复制失败：{msg}',
+    clearedAll: '已清空全部输入、输出、映射缓存（含 localStorage）',
+    persistOnMsg: '已开启持久化 · 映射将保存到 localStorage',
+    persistOffMsg: '已关闭持久化 · localStorage 中的映射数据已清空',
+    persistFailed: '持久化失败：{msg}（可能是 localStorage 空间不足）',
+    clearedPersist: '已清空 localStorage 全部映射数据',
+    readyPersistRestored: '就绪 · 持久化已开启 · 已恢复 {n} 条历史映射',
+    readyPersistEmpty: '就绪 · 持久化已开启 · 暂无历史映射',
+    readyOffline: '就绪 · 纯本地离线运行（持久化未开启）'
+  }
+};
+
+let LANG = (() => {
+  const saved = localStorage.getItem('config-mask-lang');
+  if (saved === 'zh' || saved === 'en') return saved;
+  return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+})();
+
+function t(key, vars) {
+  let s = (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), String(v));
+    }
+  }
+  return s;
+}
+
+function applyI18n() {
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('docTitle');
+  const meta = document.getElementById('meta-desc');
+  if (meta) meta.content = t('metaDescription');
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    if (el.id === 'status' || el.id === 'persist-status') return;
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  const langBtn = document.getElementById('btn-lang');
+  if (langBtn) langBtn.textContent = LANG === 'zh' ? 'EN' : '中';
+  updateModalHint();
+  updateMeta();
+}
+
+function updateModalHint() {
+  const el = document.getElementById('modal-hint');
+  if (el) el.textContent = t(State.restoreSecretsEnabled ? 'modalHintOn' : 'modalHintOff');
+}
+
+function setLang(lang) {
+  LANG = lang;
+  localStorage.setItem('config-mask-lang', lang);
+  applyI18n();
+  const modal = document.getElementById('modal-manage');
+  if (modal && modal.classList.contains('show')) renderModalBody();
+  if (State.persistEnabled && State.mappingSessions.length > 0) {
+    setStatus(t('readyPersistRestored', { n: State.mappingSessions.length }), 'success');
+  } else if (State.persistEnabled) {
+    setStatus(t('readyPersistEmpty'), 'info');
+  } else {
+    setStatus(t('readyOffline'), 'info');
+  }
+}
+
+document.getElementById('btn-lang').addEventListener('click', () => {
+  setLang(LANG === 'zh' ? 'en' : 'zh');
+});
+
+/* =================================================================
+ * 配置脱敏 / 还原工具 · 离线版 v1.1
+ * 纯前端实现，所有数据仅存于浏览器内存 / localStorage（可选）
+ * 不上传任何服务器，支持断网使用
+ * ================================================================= */
+
+// ---------- localStorage 配置 ----------
+const LS_KEY = 'desensitize_mappings_v1';
+const LS_FLAG_KEY = 'desensitize_persist_enabled';
+const LS_RESTORE_SECRETS_KEY = 'desensitize_restore_secrets_enabled';
+
+// ---------- 全局状态 ----------
+const State = {
+  mappingSessions: [],
+  MAX_SESSIONS: 50,
+  currentMappingId: null,
+  persistEnabled: false,
+  restoreSecretsEnabled: false
+};
+
+// ---------- localStorage 读写工具 ----------
+function loadPersistFlag() {
+  try {
+    return localStorage.getItem(LS_FLAG_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function savePersistFlag(enabled) {
+  try {
+    localStorage.setItem(LS_FLAG_KEY, enabled ? '1' : '0');
+  } catch (e) {
+    console.warn('localStorage write failed', e);
+  }
+}
+
+function loadRestoreSecretsFlag() {
+  try {
+    return localStorage.getItem(LS_RESTORE_SECRETS_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function saveRestoreSecretsFlag(enabled) {
+  try {
+    localStorage.setItem(LS_RESTORE_SECRETS_KEY, enabled ? '1' : '0');
+  } catch (e) {
+    console.warn('localStorage write failed', e);
+  }
+}
+
+function loadPersistedSessions() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return arr.map(s => ({
+      id: s.id,
+      mapping: new Map(s.mapping),
+      permSecrets: Array.isArray(s.permSecrets) ? s.permSecrets : [],
+      createdAt: s.createdAt,
+      inputHash: s.inputHash
+    }));
+  } catch (e) {
+    console.warn('localStorage 读取失败', e);
+    return [];
+  }
+}
+
+function savePersistedSessions() {
+  if (!State.persistEnabled) return;
+  try {
+    // Map 转普通对象再 JSON 序列化
+    const arr = State.mappingSessions.map(s => ({
+      id: s.id,
+      mapping: Array.from(s.mapping.entries()),
+      permSecrets: s.permSecrets || [],
+      createdAt: s.createdAt,
+      inputHash: s.inputHash
+    }));
+    localStorage.setItem(LS_KEY, JSON.stringify(arr));
+  } catch (e) {
+    console.warn('localStorage 写入失败', e);
+    setStatus(t('persistFailed', { msg: e.message }), 'error');
+  }
+}
+
+function clearPersistedSessions() {
+  try {
+    localStorage.removeItem(LS_KEY);
+  } catch (e) {
+    console.warn('localStorage 清空失败', e);
+  }
+}
+
+// ---------- 公共域名白名单（不脱敏） ----------
+const PUBLIC_DOMAIN_WHITELIST = new Set([
+  // 代码托管
+  'github.com', 'gitlab.com', 'bitbucket.org', 'gitee.com',
+  'githubusercontent.com', 'githubassets.com',
+  // 公共云厂商域名
+  'cloud.tencent.com', 'tencentcloudapi.com', 'myqcloud.com',
+  'aliyun.com', 'aliyuncs.com', 'alcdn.com',
+  'azure.microsoft.com', 'azure.com', 'azureedge.net',
+  'aws.amazon.com', 'amazonaws.com', 'cloudfront.net',
+  'huaweicloud.com', 'myhuaweicloud.com',
+  // 公共 CDN / 包管理
+  'cdn.jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com',
+  'npmjs.com', 'npmjs.org', 'registry.npmjs.org',
+  'pypi.org', 'files.pythonhosted.org',
+  'maven.org', 'repo1.maven.org', 'search.maven.org',
+  'docker.com', 'hub.docker.com', 'docker.io',
+  'kubernetes.io', 'k8s.io',
+  // 公共服务
+  'google.com', 'www.google.com', 'gmail.com', 'youtube.com',
+  'baidu.com', 'www.baidu.com', 'qq.com', 'weixin.qq.com',
+  'taobao.com', 'tmall.com', 'alipay.com', 'jd.com',
+  'apple.com', 'microsoft.com', 'office.com', 'live.com',
+  // 公共 DNS / 时间
+  'cloudflare.com', '1.1.1.1', '8.8.8.8',
+  'nginx.org', 'apache.org',
+  'wikipedia.org', 'stackoverflow.com',
+  // 本地保留
+  'localhost'
+]);
+
+// ---------- 密码/密钥关键词表（用于 key=value / key: value 模式） ----------
+const PASSWORD_KEYS = [
+  'password', 'passwd', 'pwd', 'pass',
+  'secret', 'secret_key', 'secretkey',
+  'api_key', 'apikey', 'api-key',
+  'access_key', 'accesskey', 'access-key',
+  'access_key_id', 'accesskeyid',
+  'secret_access_key', 'secretaccesskey',
+  'private_key', 'privatekey',
+  'public_key', 'publickey',
+  'auth', 'authorization', 'auth_token',
+  'token', 'access_token', 'accesstoken',
+  'refresh_token', 'refreshtoken',
+  'bearer',
+  'cookie',
+  'jwt', 'jwt_secret',
+  'encryption_key', 'encryptionkey',
+  'signing_key', 'signingkey',
+  'master_key', 'masterkey',
+  'db_password', 'dbpassword',
+  'database_password', 'db_pwd',
+  'root_password', 'rootpassword',
+  'mysql_password', 'redis_password',
+  'mongo_password', 'postgres_password',
+  'ftp_password', 'ssh_password',
+  'admin_password', 'user_password',
+  // 云厂商
+  'aws_access_key_id', 'aws_secret_access_key',
+  'aliyun_access_key_id', 'aliyun_access_key_secret',
+  'tencent_secretid', 'tencent_secretkey',
+  'huawei_access_key', 'huawei_secret_key',
+  // 宝塔
+  'bt_password', 'panel_password',
+  // 通用
+  'credential', 'credentials'
+];
+
+// 编译成正则：匹配 key 后跟 = 或 : 后跟非空白值
+// 值支持引号包裹（完整捕获引号内内容）；无引号时匹配到空白或常见分隔符为止
+// 注意：# 不作为分隔符（密码常含 # 字符，如 P@ss#word），注释由前导空格 + # 区分
+const PASSWORD_KEY_REGEX = new RegExp(
+  '(?<![\\w-])(' + PASSWORD_KEYS.join('|') + ')' +
+  '\\s*[:=]\\s*' +
+  '(?:([\'"])([^\'"]*)\\2|([^\\s;,}\\n\\r]+))',
+  'gi'
+);
+
+// ---------- AK/SK 模式 ----------
+const AKSK_PATTERNS = [
+  // 阿里云 AccessKey ID: LTAI 开头，24 位字母数字
+  /(?<![\w])LTAI[A-Za-z0-9]{16,20}(?![\w])/g,
+  // 腾讯云 SecretId: AKID 开头，36 位
+  /(?<![\w])AKID[A-Za-z0-9]{32,36}(?![\w])/g,
+  // AWS Access Key ID: AKIA/ASIA/AGPA 等 4 字母开头 + 16 位
+  /(?<![\w])(?:AKIA|ASIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASCA)[A-Z0-9]{16}(?![\w])/g,
+  // AWS Secret Access Key: 40 位 base64 风格
+  /(?<![\w])[A-Za-z0-9/+=]{40}(?![\w])/g,  // 太激进，单独使用会误伤，仅在密码上下文使用 -> 默认不启用
+  // 华为云 AK: 华为云 AK 通常也是 AK 开头，但格式不固定，这里保守起见匹配 AK+32位
+  /(?<![\w])AK[A-Z0-9]{30,32}(?![\w])/g,
+  // Stripe: sk_live_ / pk_live_ / rk_live_
+  /(?<![\w])(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{24,}(?![\w])/g,
+  // Slack: xoxb-/xoxp-
+  /(?<![\w])xox[baprs]-[A-Za-z0-9-]{10,}(?![\w])/g,
+  // GitHub Token: ghp_/gho_/ghu_/ghs_/ghr_
+  /(?<![\w])gh[pousr]_[A-Za-z0-9]{36,}(?![\w])/g,
+  // GitLab Token: glpat-
+  /(?<![\w])glpat-[A-Za-z0-9_-]{20,}(?![\w])/g,
+  // JWT 三段式（仅当上下文明显时匹配，这里独立匹配以命中裸 JWT）
+  /(?<![\w])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(?![\w])/g
+];
+
+// ---------- 私钥块 ----------
+const PRIVATE_KEY_REGEX = /-----BEGIN(?:\s[A-Z\s]+)?\sPRIVATE\sKEY-----[\s\S]*?-----END(?:\s[A-Z\s]+)?\sPRIVATE\sKEY-----/g;
+
+// ---------- 数据库连接字符串 ----------
+// mysql://user:pass@host:port/db  postgres://...  mongodb://...  redis://...
+const DB_CONN_REGEX = /(?<![\w])(mysql|postgresql|postgres|mongodb|redis|mariadb|jdbc:[a-z]+):\/\/[^\s@:/]+:[^\s@:/]+@[^\s;/]+/gi;
+
+// ---------- IPv4 ----------
+// 排除 0.0.0.0 / 127.0.0.1（localhost 系列保留 IP，但端口需脱敏，故 IP 也脱敏更安全）
+// 用户要求：localhost 文本保留，仅端口遮挡 —— 但 127.0.0.1 不在 localhost 字面量内，按 IP 脱敏
+const IPV4_REGEX = /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])/g;
+
+// ---------- 端口 ----------
+// listen 80;  listen 443 ssl;  listen [::]:80;
+const LISTEN_PORT_REGEX = /(listen\s+)((?:\[?::\]?|[\d.]+:)?)(\d{1,5})/gi;
+// localhost:8080 / 127.0.0.1:8080 / 0.0.0.0:8080 / :8080
+const HOST_PORT_REGEX = /((?:localhost|[\d.]+|\[::\]):)(\d{1,5})/g;
+// upstream server app:8080;  proxy_pass http://host:8080
+const PROXY_PORT_REGEX = /((?:proxy_pass\s+https?:\/\/|server\s+)[^\s;:]+:)(\d{1,5})/gi;
+
+// ---------- 域名 ----------
+// 匹配 xxx.yyy.zzz 形式的域名（至少两点），排除白名单和常见文件后缀
+// 关键：排除 .html/.htm/.php/.conf/.log/.ini 等文件后缀（这些是文件名不是域名）
+// 通过负向先行断言排除
+const FILE_EXTENSION_BLACKLIST = [
+  'html', 'htm', 'php', 'conf', 'log', 'ini', 'js', 'css', 'gif', 'jpg',
+  'jpeg', 'png', 'bmp', 'swf', 'txt', 'xml', 'json', 'cert', 'pem', 'key',
+  'crt', 'csr', 'sql', 'bak', 'tar', 'gz', 'zip', 'rar', '7z', 'lock',
+  'pid', 'sock', 'tmp', 'cache', 'so', 'dll', 'exe', 'bin', 'sh', 'py',
+  'rb', 'java', 'class', 'jar', 'war', 'md', 'yaml', 'yml', 'toml',
+  'env', 'properties', 'gitignore', 'dockerignore', 'editorconfig',
+  'mp4', 'mp3', 'avi', 'mov', 'wav', 'ogg', 'webm', 'woff', 'woff2',
+  'ttf', 'otf', 'eot', 'ico', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx',
+  'ppt', 'pptx'
+];
+const FILE_EXT_NEG_LOOKAHEAD = '(?![\\w.-])';
+const DOMAIN_REGEX = new RegExp(
+  '(?<![\\w.-])((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,24})' +
+  FILE_EXT_NEG_LOOKAHEAD,
+  'g'
+);
+// 文件后缀黑名单（用于匹配后过滤，避免正则负向先行断言失效）
+const FILE_EXT_SUFFIX_REGEX = new RegExp('\\.(?:' + FILE_EXTENSION_BLACKLIST.join('|') + ')$', 'i');
+
+// ---------- 文件路径（Nginx 指令后跟的路径） ----------
+// 优先级最高，必须在域名识别之前执行
+// 匹配指令：include / root / access_log / error_log / ssl_certificate / ssl_certificate_key
+// 严格限定为：1) 绝对路径 /xxx/yyy；2) 相对路径但必须形如 xxx.conf/xxx.ini（带已知文件后缀）
+// 备选 2 用已知后缀白名单，避免误吃 server_name xxx
+// 捕获组 2 = 指令后的空白（保留原样），捕获组 3 = 路径
+const NGINX_PATH_DIRECTIVE_REGEX = new RegExp(
+  '\\b(include|root|access_log|error_log|ssl_certificate|ssl_certificate_key)(\\s+)' +
+  '(\\/[^\\s;]+|[^\\s;/]+\\.(?:' + FILE_EXTENSION_BLACKLIST.join('|') + '))',
+  'gi'
+);
+
+// ---------- 通用文件路径 ----------
+// /www/server/...  /var/log/nginx/...  /etc/letsencrypt/...  /home/wwwroot/...
+const PATH_REGEX = /(?<![\w])(\/(?:www|var|etc|home|opt|usr|root|data|app|srv|tmp)(?:\/[\w.-]+)+)/g;
+
+// ---------- 业务接口路径 ----------
+// /api/xxx /v1/xxx /v2/xxx（独立出现，不在 URL 内）
+const API_PATH_REGEX = /(?<![\w/])(\/(?:api|v\d+|internal|admin|backend|gateway|service)[\w/-]{2,})/g;
+
+// ---------- upstream 服务名 ----------
+// upstream xxx {  -> 捕获服务名
+const UPSTREAM_NAME_REGEX = /(upstream\s+)([\w-]+)/gi;
+
+// ---------- proxy_pass 裸服务名 ----------
+// proxy_pass http://service_name;  proxy_pass http://service_name/path;
+// 服务名不含点（区别于域名）、不含端口
+const PROXY_PASS_SERVICE_REGEX = /(proxy_pass\s+https?:\/\/)([\w-]+)(?=\/[\s;]|;|\s)/gi;
+
+/* =================================================================
+ * 工具函数
+ * ================================================================= */
+
+function setStatus(msg, type = '') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+}
+
+function genMappingId() {
+  // 生成短 ID，便于用户识别
+  return '#' + Math.random().toString(36).substring(2, 6).toUpperCase() +
+         Date.now().toString(36).slice(-2).toUpperCase();
+}
+
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function updateMeta() {
+  const input = document.getElementById('input').value;
+  const output = document.getElementById('output').value;
+  const inputLines = input ? input.split('\n').length : 0;
+  const outputLines = output ? output.split('\n').length : 0;
+  document.getElementById('input-meta').textContent = t('metaLinesChars', { lines: inputLines, chars: input.length });
+  document.getElementById('output-meta').textContent = t('metaLinesChars', { lines: outputLines, chars: output.length });
+  document.getElementById('map-count').textContent = State.mappingSessions.length;
+  document.getElementById('last-mapping-id').textContent = State.currentMappingId || '—';
+  const persistEl = document.getElementById('persist-status');
+  persistEl.textContent = State.persistEnabled ? t('persistOn') : t('persistOff');
+  // 同步开关 UI 状态
+  const toggle = document.getElementById('toggle-persist');
+  if (State.persistEnabled && !toggle.classList.contains('active')) {
+    toggle.classList.add('active');
+  } else if (!State.persistEnabled && toggle.classList.contains('active')) {
+    toggle.classList.remove('active');
+  }
+  const toggleSecrets = document.getElementById('toggle-restore-secrets');
+  if (toggleSecrets) {
+    if (State.restoreSecretsEnabled && !toggleSecrets.classList.contains('active')) {
+      toggleSecrets.classList.add('active');
+    } else if (!State.restoreSecretsEnabled && toggleSecrets.classList.contains('active')) {
+      toggleSecrets.classList.remove('active');
+    }
+  }
+}
+
+/* =================================================================
+ * 映射管理浮层
+ * ================================================================= */
+
+function renderModalBody() {
+  const body = document.getElementById('modal-body');
+  if (State.mappingSessions.length === 0) {
+    body.innerHTML = '<div class="empty-tip">' + escapeHtml(t('modalEmpty')) + '<br><span style="font-size:11px;color:#555">' + escapeHtml(t('modalEmptySub')) + '</span></div>';
+    return;
+  }
+  const locale = LANG === 'zh' ? 'zh-CN' : 'en-US';
+  const html = State.mappingSessions.slice().reverse().map(s => {
+    const items = Array.from(s.mapping.entries()).slice(0, 8).map(([k, v]) =>
+      `<div><span class="ph">${escapeHtml(k)}</span><span class="arrow">→</span><span>${escapeHtml(v.length > 60 ? v.slice(0, 60) + '...' : v)}</span></div>`
+    ).join('');
+    const moreCount = s.mapping.size > 8 ? `<span style="color:#666">${escapeHtml(t('sessionMore', { n: s.mapping.size - 8 }))}</span>` : '';
+    const time = new Date(s.createdAt).toLocaleString(locale, { hour12: false });
+    const isCurrent = s.id === State.currentMappingId;
+    const activeBadge = isCurrent ? '<span style="color:#4caf50;font-size:11px;border:1px solid #4caf50;padding:1px 6px;border-radius:3px;">' + escapeHtml(t('sessionActive')) + '</span>' : '';
+    const activateBtn = isCurrent
+      ? '<button class="activate-btn" disabled style="opacity:0.5;cursor:not-allowed;">' + escapeHtml(t('sessionAlready')) + '</button>'
+      : '<button class="activate-btn" data-sid="' + escapeHtml(s.id) + '">' + escapeHtml(t('sessionActivate')) + '</button>';
+    const secretN = s.permSecrets ? s.permSecrets.length : 0;
+    const metaText = secretN > 0
+      ? t('sessionMeta', { time, n: s.mapping.size, secrets: secretN })
+      : t('sessionMetaNoSecrets', { time, n: s.mapping.size });
+    return `
+      <div class="session-card" style="${isCurrent ? 'border-color:#4caf50;' : ''}">
+        <div class="session-card-head">
+          <span class="sid">${escapeHtml(s.id)}</span>
+          ${activeBadge}
+          <span class="meta">${escapeHtml(metaText)}</span>
+          <button class="activate-btn-spacer"></button>
+          ${activateBtn}
+          <button class="del-btn" data-sid="${escapeHtml(s.id)}">${escapeHtml(t('sessionDelete'))}</button>
+        </div>
+        <div class="session-card-body">
+          ${items}
+          ${moreCount}
+        </div>
+      </div>
+    `;
+  }).join('');
+  body.innerHTML = html;
+
+  // 绑定删除按钮
+  body.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sid = btn.dataset.sid;
+      if (!confirm(t('confirmDeleteSession', { sid }))) return;
+      State.mappingSessions = State.mappingSessions.filter(s => s.id !== sid);
+      if (State.currentMappingId === sid) State.currentMappingId = null;
+      savePersistedSessions();
+      updateMeta();
+      renderModalBody();
+      setStatus(t('statusDeletedSession', { sid }), 'success');
+    });
+  });
+
+  // 绑定激活按钮
+  body.querySelectorAll('.activate-btn').forEach(btn => {
+    if (btn.disabled) return;
+    btn.addEventListener('click', () => {
+      const sid = btn.dataset.sid;
+      State.currentMappingId = sid;
+      updateMeta();
+      renderModalBody();
+      setStatus(t('statusActivatedSession', { sid }), 'success');
+    });
+  });
+}
+
+/* =================================================================
+ * 脱敏引擎
+ * 思路：按"先长后短"顺序匹配，命中后用占位符替换
+ * 不可逆项：直接替换为 [KEY_PERM]，不存映射
+ * 可逆项：替换为 [TYPE_NN]，存入当前会话映射表
+ * ================================================================= */
+
+function desensitize(text) {
+  const mapping = new Map();
+  const permSecrets = [];
+  const counters = { IP: 0, DOMAIN: 0, PORT: 0, PATH: 0, API: 0, UPSTREAM: 0, HOST: 0 };
+  let result = text;
+
+  const sessionId = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+  const reversible = (type, original) => {
+    counters[type]++;
+    const placeholder = `[${type}_${String(counters[type]).padStart(2, '0')}.${sessionId}]`;
+    mapping.set(placeholder, original);
+    return placeholder;
+  };
+
+  const irreversible = (original) => {
+    if (State.restoreSecretsEnabled && original != null && original !== '') {
+      permSecrets.push(original);
+    }
+    return '[KEY_PERM]';
+  };
+
+  result = result.replace(PRIVATE_KEY_REGEX, (m) => irreversible(m));
+
+  result = result.replace(DB_CONN_REGEX, (m) => {
+    const parts = m.match(/^([a-z]+:\/\/)([^\s@:/]+):([^\s@:/]+)@([^\s;/]+)/i);
+    if (parts) {
+      const proto = parts[1];
+      const user = parts[2];
+      const host = parts[4];
+      return proto + user + ':' + irreversible(parts[3]) + '@' + reversible('HOST', host);
+    }
+    return irreversible(m);
+  });
+
+  for (const re of AKSK_PATTERNS) {
+    if (re.source.includes('{40}')) continue;
+    result = result.replace(re, (m) => irreversible(m));
+  }
+
+  result = result.replace(PASSWORD_KEY_REGEX, (m, key, quote, quotedValue, bareValue) => {
+    const value = quote ? quotedValue : bareValue;
+    if (value === undefined || value === null || value.length < 1) return m;
+    return m.replace(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), irreversible(value));
+  });
+
+  // === 5. 完整 URL（含域名+端口+路径）http(s)://xxx.yyy:port/path ===
+  // 在替换域名之前，先把 URL 内的域名和端口捕获
+  // 简化处理：先不拆 URL，让后续域名/端口正则各自命中
+
+  // === 6. upstream 服务名（upstream xxx {） ===
+  result = result.replace(UPSTREAM_NAME_REGEX, (m, prefix, name) => {
+    return prefix + reversible('UPSTREAM', name);
+  });
+
+  // === 6.5. proxy_pass 裸服务名（http://service_name; 不带端口和路径） ===
+  // 必须在 PATH 之前执行，避免 service_name 中的 / 误命中路径正则
+  result = result.replace(PROXY_PASS_SERVICE_REGEX, (m, prefix, name) => {
+    return prefix + reversible('UPSTREAM', name);
+  });
+
+  // === 7. Nginx 指令后的文件路径（include/root/access_log/error_log/ssl_certificate 等） ===
+  // 必须在通用 PATH 和 DOMAIN 之前执行，避免 /www/.../php.ini 被拆解误识别
+  // 捕获组：1=指令, 2=空白（保留原样）, 3=路径
+  result = result.replace(NGINX_PATH_DIRECTIVE_REGEX, (m, directive, whitespace, path) => {
+    return directive + whitespace + reversible('PATH', path);
+  });
+
+  // === 7.5. 通用文件路径 ===
+  result = result.replace(PATH_REGEX, (m) => reversible('PATH', m));
+
+  // === 8. 业务接口路径 ===
+  result = result.replace(API_PATH_REGEX, (m) => reversible('API', m));
+
+  // === 9. 域名（排除白名单、排除文件后缀、排除已经是占位符的部分） ===
+  result = result.replace(DOMAIN_REGEX, (m) => {
+    // 排除文件后缀（.html/.htm/.conf/.log 等）
+    if (FILE_EXT_SUFFIX_REGEX.test(m)) return m;
+    const lower = m.toLowerCase();
+    // 白名单完全匹配或后缀匹配
+    for (const w of PUBLIC_DOMAIN_WHITELIST) {
+      if (lower === w || lower.endsWith('.' + w)) return m;
+    }
+    return reversible('DOMAIN', m);
+  });
+
+  // === 10. listen 端口 ===
+  result = result.replace(LISTEN_PORT_REGEX, (m, prefix, addr, port) => {
+    return prefix + addr + reversible('PORT', port);
+  });
+
+  // === 11. host:port 形式（含 localhost:8080、127.0.0.1:8080） ===
+  // 注意：localhost 文本本身保留，只脱敏端口
+  result = result.replace(HOST_PORT_REGEX, (m, prefix, port) => {
+    return prefix + reversible('PORT', port);
+  });
+
+  // === 12. proxy_pass / upstream server 中的端口 ===
+  result = result.replace(PROXY_PORT_REGEX, (m, prefix, port) => {
+    return prefix + reversible('PORT', port);
+  });
+
+  // === 13. IPv4（最后处理，避免吃掉已经替换的占位符内的数字） ===
+  // 占位符形如 [IP_01.A3F9]，不含点号末位数字 + 字母组合，不会被 IPV4_REGEX 误命中
+  result = result.replace(IPV4_REGEX, (m) => {
+    // 0.0.0.0 是通配地址，按用户需求是否脱敏？这里选择脱敏（更安全）
+    return reversible('IP', m);
+  });
+
+  return { result, mapping, permSecrets, sessionId: '#' + sessionId };
+}
+
+function findSessionForRestore(text) {
+  const sidMatch = text.match(/\.([A-Z0-9]+)\]/);
+  if (sidMatch) {
+    const sid = sidMatch[1];
+    const found = State.mappingSessions.find(s => s.id === '#' + sid || s.id === sid);
+    if (found) return found;
+  }
+  if (State.currentMappingId) {
+    const found = State.mappingSessions.find(s => s.id === State.currentMappingId);
+    if (found) return found;
+  }
+  return State.mappingSessions.length ? State.mappingSessions[State.mappingSessions.length - 1] : null;
+}
+
+function restorePermSecrets(text, session) {
+  if (!session || !session.permSecrets || !session.permSecrets.length) {
+    return { text, restored: 0 };
+  }
+  let idx = 0;
+  let restored = 0;
+  const result = text.replace(/\[KEY_PERM\]/g, () => {
+    if (idx < session.permSecrets.length) {
+      restored++;
+      return session.permSecrets[idx++];
+    }
+    return '[KEY_PERM]';
+  });
+  return { text: result, restored };
+}
+
+/* =================================================================
+ * 还原引擎
+ * 思路：扫描所有占位符，按"最近 N 条映射"自动匹配
+ * 不可逆 [KEY_PERM] 无法还原，保留原样
+ * ================================================================= */
+
+function restore(text) {
+  // 占位符格式：[TYPE_NN.SID]（可逆）或 [KEY_PERM]（不可逆）
+  const placeholderRegex = /\[(IP|DOMAIN|PORT|PATH|API|UPSTREAM|HOST)_\d{2}\.[A-Z0-9]+\]|\[KEY_PERM\]/g;
+  const placeholders = new Set();
+  let m;
+  while ((m = placeholderRegex.exec(text)) !== null) {
+    placeholders.add(m[0]);
+  }
+
+  if (placeholders.size === 0) {
+    return { ok: false, reason: t('restoreNoPlaceholders') };
+  }
+
+  // 从占位符中提取会话 ID，精确路由到对应会话，绝不交叉
+  // 不可逆 [KEY_PERM] 直接跳过
+  const resolved = {};
+  let unresolved = [];
+  for (const ph of placeholders) {
+    if (ph === '[KEY_PERM]') continue;
+    // 提取会话 ID（点号后的部分）
+    const sidMatch = ph.match(/\.([A-Z0-9]+)\]$/);
+    if (!sidMatch) {
+      unresolved.push(ph);
+      continue;
+    }
+    const sid = sidMatch[1];
+    // 查找对应会话
+    const session = State.mappingSessions.find(s => s.id === '#' + sid);
+    if (session && session.mapping.has(ph)) {
+      resolved[ph] = session.mapping.get(ph);
+    } else {
+      unresolved.push(ph);
+    }
+  }
+
+  // 执行替换
+  let result = text.replace(placeholderRegex, (m) => {
+    if (m === '[KEY_PERM]') return m;
+    if (resolved[m] !== undefined) return resolved[m];
+    return m;
+  });
+
+  const secretSession = findSessionForRestore(text);
+  const permResult = restorePermSecrets(result, secretSession);
+  result = permResult.text;
+
+  return {
+    ok: true,
+    result,
+    unresolvedCount: unresolved.length,
+    totalPlaceholders: placeholders.size,
+    permRestored: permResult.restored
+  };
+}
+
+/* =================================================================
+ * UI 渲染：高亮占位符
+ * ================================================================= */
+
+function renderOutput(text) {
+  // 设置 textarea 的值（用户看到的是透明文字 + caret）
+  const ta = document.getElementById('output');
+  ta.value = text;
+  // 同步渲染 backdrop 高亮层
+  renderBackdrop(text);
+}
+
+function renderBackdrop(text) {
+  const backdrop = document.getElementById('output-backdrop');
+  if (!text) {
+    backdrop.innerHTML = '';
+    return;
+  }
+  // 占位符高亮：[KEY_PERM] 红色，[TYPE_NN.SID] 青色
+  const placeholderRegex = /(\[(?:IP|DOMAIN|PORT|PATH|API|UPSTREAM|HOST)_\d{2}\.[A-Z0-9]+\]|\[KEY_PERM\])/g;
+  const html = escapeHtml(text).replace(placeholderRegex, (m) => {
+    const cls = m === '[KEY_PERM]' ? 'perm' : 'reversible';
+    return `<span class="${cls}">${m}</span>`;
+  });
+  // 末尾补一个空格，避免最后一行无换行时高度计算不准
+  backdrop.innerHTML = html + '\n';
+}
+
+// 同步 backdrop 的滚动位置到 textarea
+function syncOutputScroll() {
+  const ta = document.getElementById('output');
+  const backdrop = document.getElementById('output-backdrop');
+  backdrop.scrollTop = ta.scrollTop;
+  backdrop.scrollLeft = ta.scrollLeft;
+}
+
+/* =================================================================
+ * 事件处理
+ * ================================================================= */
+
+document.getElementById('btn-desensitize').addEventListener('click', () => {
+  const input = document.getElementById('input').value;
+  if (!input || !input.trim()) {
+    setStatus(t('errNoInput'), 'error');
+    return;
+  }
+
+  try {
+    const { result, mapping, permSecrets, sessionId } = desensitize(input);
+
+    if (mapping.size === 0 && !result.includes('[KEY_PERM]')) {
+      setStatus(t('errNoSensitive'), 'info');
+    }
+
+    // 创建新会话（使用 desensitize 生成的 sessionId，与占位符中的 SID 一致）
+    const session = {
+      id: sessionId,
+      mapping: mapping,
+      permSecrets: State.restoreSecretsEnabled ? permSecrets : [],
+      createdAt: Date.now(),
+      inputHash: simpleHash(input)
+    };
+    State.mappingSessions.push(session);
+
+    // 超过上限移除最旧的
+    if (State.mappingSessions.length > State.MAX_SESSIONS) {
+      State.mappingSessions.shift();
+    }
+
+    // 持久化到 localStorage（如果开启）
+    savePersistedSessions();
+
+    State.currentMappingId = sessionId;
+    renderOutput(result);
+    document.getElementById('mapping-info').textContent =
+      mapping.size > 0 ? t('mappingInfo', { sid: sessionId, n: mapping.size }) : '';
+    updateMeta();
+
+    const permCount = (result.match(/\[KEY_PERM\]/g) || []).length;
+    setStatus(t('maskDone', { rev: mapping.size, perm: permCount, sid: sessionId }), 'success');
+  } catch (e) {
+    setStatus(t('errMaskFailed', { msg: e.message }), 'error');
+    console.error(e);
+  }
+});
+
+document.getElementById('btn-restore').addEventListener('click', () => {
+  const outputText = document.getElementById('output').value;
+  if (!outputText || !outputText.trim()) {
+    setStatus(t('errNoRestoreContent'), 'error');
+    return;
+  }
+
+  if (State.mappingSessions.length === 0) {
+    setStatus(t('errNoMappings'), 'error');
+    return;
+  }
+
+  try {
+    const r = restore(outputText);
+    if (!r.ok) {
+      setStatus(r.reason, 'error');
+      return;
+    }
+
+    renderOutput(r.result);
+    updateMeta();
+
+    if (r.unresolvedCount > 0) {
+      setStatus(t('restorePartial', { n: r.unresolvedCount }), 'info');
+    } else {
+      const permRemaining = (r.result.match(/\[KEY_PERM\]/g) || []).length;
+      if (r.permRestored > 0) {
+        setStatus(t('restoreDoneWithSecrets', { total: r.totalPlaceholders, permRestored: r.permRestored }), 'success');
+      } else {
+        setStatus(t('restoreDone', { total: r.totalPlaceholders, perm: permRemaining }), 'success');
+      }
+    }
+  } catch (e) {
+    setStatus(t('errRestoreFailed', { msg: e.message }), 'error');
+    console.error(e);
+  }
+});
+
+document.getElementById('btn-copy').addEventListener('click', async () => {
+  const outputText = document.getElementById('output').value;
+  if (!outputText) {
+    setStatus(t('errNoCopy'), 'error');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(outputText);
+    setStatus(t('copied', { n: outputText.length }), 'success');
+  } catch (e) {
+    // 降级方案：使用临时 textarea
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = outputText;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        setStatus(t('copiedFallback', { n: outputText.length }), 'success');
+      } else {
+        setStatus(t('errCopyManual'), 'error');
+      }
+    } catch (e2) {
+      setStatus(t('errCopyFailed', { msg: e2.message }), 'error');
+    }
+  }
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  document.getElementById('input').value = '';
+  document.getElementById('output').value = '';
+  document.getElementById('output-backdrop').innerHTML = '';
+  document.getElementById('mapping-info').textContent = '';
+  State.mappingSessions = [];
+  State.currentMappingId = null;
+  // 同步清空 localStorage
+  clearPersistedSessions();
+  updateMeta();
+  setStatus(t('clearedAll'), 'success');
+});
+
+// 持久化开关
+document.getElementById('toggle-persist').addEventListener('click', () => {
+  State.persistEnabled = !State.persistEnabled;
+  savePersistFlag(State.persistEnabled);
+  if (State.persistEnabled) {
+    savePersistedSessions();
+    setStatus(t('persistOnMsg'), 'success');
+  } else {
+    clearPersistedSessions();
+    setStatus(t('persistOffMsg'), 'info');
+  }
+  updateMeta();
+});
+
+function setRestoreSecretsEnabled(enabled) {
+  State.restoreSecretsEnabled = enabled;
+  saveRestoreSecretsFlag(enabled);
+  if (!enabled) {
+    State.mappingSessions.forEach(s => { s.permSecrets = []; });
+    savePersistedSessions();
+  }
+  updateMeta();
+  updateModalHint();
+  setStatus(enabled ? t('restoreSecretsOnMsg') : t('restoreSecretsOffMsg'), enabled ? 'success' : 'info');
+}
+
+function closeSecretsWarnModal() {
+  document.getElementById('modal-secrets-warn').classList.remove('show');
+}
+
+document.getElementById('toggle-restore-secrets').addEventListener('click', () => {
+  if (State.restoreSecretsEnabled) {
+    setRestoreSecretsEnabled(false);
+    return;
+  }
+  document.getElementById('modal-secrets-warn').classList.add('show');
+});
+
+document.getElementById('btn-secrets-confirm').addEventListener('click', () => {
+  closeSecretsWarnModal();
+  setRestoreSecretsEnabled(true);
+});
+
+document.getElementById('btn-secrets-cancel').addEventListener('click', () => {
+  closeSecretsWarnModal();
+  updateMeta();
+});
+
+document.getElementById('modal-secrets-close').addEventListener('click', () => {
+  closeSecretsWarnModal();
+  updateMeta();
+});
+
+document.getElementById('modal-secrets-warn').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-secrets-warn') {
+    closeSecretsWarnModal();
+    updateMeta();
+  }
+});
+
+// 映射管理浮层
+document.getElementById('btn-manage').addEventListener('click', () => {
+  renderModalBody();
+  document.getElementById('modal-manage').classList.add('show');
+});
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('modal-manage').classList.remove('show');
+});
+document.getElementById('modal-manage').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-manage') {
+    document.getElementById('modal-manage').classList.remove('show');
+  }
+});
+document.getElementById('btn-clear-persist').addEventListener('click', () => {
+  if (!confirm(t('confirmClearPersist'))) return;
+  clearPersistedSessions();
+  State.mappingSessions = [];
+  State.currentMappingId = null;
+  updateMeta();
+  renderModalBody();
+  setStatus(t('clearedPersist'), 'success');
+});
+
+// 输入框元信息实时更新
+document.getElementById('input').addEventListener('input', updateMeta);
+document.getElementById('output').addEventListener('input', () => {
+  updateMeta();
+  // 用户手动编辑输出框时，同步更新 backdrop 高亮
+  renderBackdrop(document.getElementById('output').value);
+});
+// 同步滚动
+document.getElementById('output').addEventListener('scroll', syncOutputScroll);
+
+// 快捷键
+document.addEventListener('keydown', (e) => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('btn-desensitize').click();
+  } else if (ctrl && e.key.toLowerCase() === 'r') {
+    e.preventDefault();
+    document.getElementById('btn-restore').click();
+  } else if (ctrl && e.shiftKey && e.key.toLowerCase() === 'c') {
+    e.preventDefault();
+    document.getElementById('btn-copy').click();
+  } else if (ctrl && e.key.toLowerCase() === 'l') {
+    e.preventDefault();
+    document.getElementById('btn-clear').click();
+  }
+});
+
+// 初始化：从 localStorage 恢复持久化状态
+(function init() {
+  applyI18n();
+  State.persistEnabled = loadPersistFlag();
+  State.restoreSecretsEnabled = loadRestoreSecretsFlag();
+  if (State.persistEnabled) {
+    const sessions = loadPersistedSessions();
+    State.mappingSessions = sessions.slice(-State.MAX_SESSIONS);
+    if (State.mappingSessions.length > 0) {
+      State.currentMappingId = State.mappingSessions[State.mappingSessions.length - 1].id;
+    }
+  }
+  updateMeta();
+  if (State.persistEnabled && State.mappingSessions.length > 0) {
+    setStatus(t('readyPersistRestored', { n: State.mappingSessions.length }), 'success');
+  } else if (State.persistEnabled) {
+    setStatus(t('readyPersistEmpty'), 'info');
+  } else {
+    setStatus(t('readyOffline'), 'info');
+  }
+})();
+</script>
+
+</body>
+</html>

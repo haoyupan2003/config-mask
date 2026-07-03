@@ -1,0 +1,19 @@
+{
+  "name": "config-mask",
+  "version": "1.0.0",
+  "description": "配置文件脱敏 / 还原工具。纯前端单文件，双击 [`index.html`](index.html) 即用，数据不出本机。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples"
+  },
+  "scripts": {
+    "screenshots": "node scripts/capture-screenshots.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
+}
